@@ -17,11 +17,12 @@ def calcScaleZeroPoint(min_val, max_val, num_bits=8):
     zero_point = qmax - max_val / scale
 
     if zero_point < qmin:
-        zero_point = qmin
+        zero_point = torch.tensor([qmin], dtype=torch.float32).to(min_val.device)
     elif zero_point > qmax:
-        zero_point = qmax
+        # zero_point = qmax
+        zero_point = torch.tensor([qmax], dtype=torch.float32).to(max_val.device)
 
-    zero_point = int(zero_point)
+    zero_point.round_()
 
     return scale, zero_point
 
@@ -62,23 +63,28 @@ def search(M):
         n += 1
 
 
-class QParam:
+class QParam(nn.Module):
 
     def __init__(self, num_bits=8):
+        super(QParam, self).__init__()
         self.num_bits = num_bits
-        self.scale = None
-        self.zero_point = None
-        self.min = None
-        self.max = None
+        scale = torch.tensor([], requires_grad=False)
+        zero_point = torch.tensor([], requires_grad=False)
+        min = torch.tensor([], requires_grad=False)
+        max = torch.tensor([], requires_grad=False)
+        self.register_buffer('scale', scale)
+        self.register_buffer('zero_point', zero_point)
+        self.register_buffer('min', min)
+        self.register_buffer('max', max)
 
-    def update(self, tensor):  # 统计min max
-        if self.max is None or self.max < tensor.max():
-            self.max = tensor.max()
-        self.max = 0 if self.max < 0 else self.max
+    def update(self, tensor):
+        if self.max.nelement() == 0 or self.max.data < tensor.max().data:
+            self.max.data = tensor.max().data
+        self.max.clamp_(min=0)
 
-        if self.min is None or self.min > tensor.min():
-            self.min = tensor.min()
-        self.min = 0 if self.min > 0 else self.min
+        if self.min.nelement() == 0 or self.min.data > tensor.min().data:
+            self.min.data = tensor.min().data
+        self.min.clamp_(max=0)
 
         self.scale, self.zero_point = calcScaleZeroPoint(self.min, self.max, self.num_bits)
 
@@ -87,6 +93,14 @@ class QParam:
 
     def dequantize_tensor(self, q_x):
         return dequantize_tensor(q_x, self.scale, self.zero_point)
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        key_names = ['scale', 'zero_point', 'min', 'max']
+        for key in key_names:
+            value = getattr(self, key)
+            value.data = state_dict[prefix + key].data
+            state_dict.pop(prefix + key)
 
     def __str__(self):
         info = 'scale: %.10f ' % self.scale
@@ -155,7 +169,6 @@ class QConv2d(QModule):
                      stride=self.conv_module.stride,
                      padding=self.conv_module.padding, dilation=self.conv_module.dilation,
                      groups=self.conv_module.groups)
-
 
         if hasattr(self, 'qo'):
             self.qo.update(x)
@@ -262,10 +275,6 @@ class QReLU(QModule):
 class QMaxPooling2d(QModule):
 
     def __init__(self, kernel_size=3, stride=1, padding=0, qi=False, num_bits=None):
-        """
-
-        :rtype: object
-        """
         super(QMaxPooling2d, self).__init__(qi=qi, num_bits=num_bits)
         self.kernel_size = kernel_size
         self.stride = stride
