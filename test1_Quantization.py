@@ -16,8 +16,11 @@ from torch import nn
 import torch.utils.data as Data
 from torch.nn import functional as F
 
+torch.manual_seed(1)
+bit_width = 8
+
 train_loader = Data.DataLoader(
-    torchvision.datasets.CIFAR10('./DataSet', train=True, download=True,
+    torchvision.datasets.CIFAR10('./DataSet', train=True, download=False,
                                  transform=torchvision.transforms.Compose([
                                      torchvision.transforms.ToTensor(),
                                      torchvision.transforms.Resize([32, 32]),
@@ -27,7 +30,7 @@ train_loader = Data.DataLoader(
     batch_size=64, shuffle=True)
 
 test_loader = Data.DataLoader(
-    torchvision.datasets.CIFAR10('./DataSet', train=False, download=True,
+    torchvision.datasets.CIFAR10('./DataSet', train=False, download=False,
                                  transform=torchvision.transforms.Compose([
                                      torchvision.transforms.ToTensor(),
                                      torchvision.transforms.Resize([32, 32]),
@@ -248,13 +251,13 @@ except:
     print("load model failed")
 
 net.eval()
-num_acc = 0
-for idx, (x, y) in enumerate(test_loader):
-    out = net(x)
-    num_acc += torch.eq(torch.argmax(out, dim=1), y).sum().item()
-print(num_acc / len(test_loader.dataset))
+# num_acc = 0
+# for idx, (x, y) in enumerate(test_loader):
+#     out = net(x)
+#     num_acc += torch.eq(torch.argmax(out, dim=1), y).sum().item()
+# print(num_acc / len(test_loader.dataset))
 
-net.quantize(num_bits=16)
+net.quantize(num_bits=bit_width)
 
 for idx, (x, y) in enumerate(train_loader):
     out = net.quantize_forward(x)

@@ -8,11 +8,31 @@ from torch.autograd import Variable
 
 from function import FakeQuantize
 
+is_change_scale = True
+is_change_zp = False
 
 def calcScaleZeroPoint(min_val, max_val, num_bits=8):
     qmin = 0.
     qmax = 2. ** num_bits - 1.
     scale = (max_val - min_val) / (qmax - qmin)
+
+    if is_change_scale:
+        if num_bits == 1:
+            scale = 1.5958
+        if num_bits == 2:
+            scale = 0.9957
+        if num_bits == 3:
+            scale = 0.5860
+        if num_bits == 4:
+            scale = 0.3352
+        if num_bits == 5:
+            scale = 0.1881
+        if num_bits == 6:
+            scale = 0.1041
+        if num_bits == 7:
+            scale = 0.0569
+        if num_bits == 8:
+            scale = 0.0308
 
     zero_point = qmax - max_val / scale
 
